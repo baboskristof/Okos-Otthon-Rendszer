@@ -23,15 +23,13 @@ void setup() {
 
 void loop() {
   char customKey = customKeypad.getKey();
-
   if (customKey) {
-    HC12.println(customKey);
-    
-  }    
-  while (HC12.available()) {        // If HC-12 has data
-    Serial.write(HC12.read());      // Send the data to Serial monitor
+    HC12.write(customKey);
   }
   while (Serial.available()) {      // If Serial monitor has data
     HC12.write(Serial.read());      // Send that data to HC-12
+  }
+  while (HC12.available()) {
+    Serial.write(HC12.read());
   }
 }
