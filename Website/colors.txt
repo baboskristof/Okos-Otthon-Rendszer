@@ -1,0 +1,4 @@
+Main #2F3B53
+Accent1 (banner) #1C263A
+Drop shadow #444F64
+Text #FFFFFF
