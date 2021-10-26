@@ -10,6 +10,7 @@ SoftwareSerial HC12(10, 11); // HC-12 TX Pin, HC-12 RX Pin
 
 const uint8_t dataPin = 2;
 const uint8_t clockPin = 3;
+const uint8_t sw1Pin = 4;
 APA102<dataPin, clockPin> ledStrip;
 
 #define LED_COUNT 24
@@ -19,7 +20,7 @@ rgb_color colors[LED_COUNT];
 uint8_t globalBrightness = 1;
 uint8_t brightnessStep = 5;
 
-int indata;
+String indata;
 
 #define NUM_STATES  7  // number of patterns to cycle through
 
@@ -30,14 +31,14 @@ unsigned int seed = 0;  // used to initialize random number generator
 
 // enumerate the possible patterns in the order they will cycle
 enum Pattern {
-  WarmWhiteShimmer = 0,
-  RandomColorWalk = 1,
-  TraditionalColors = 2,
-  ColorExplosion = 3,
-  Gradient = 4,
-  BrightTwinkle = 5,
-  Collision = 6,
-  AllOff = 255
+  AllOff = 0,
+  //WarmWhiteShimmer = 0,
+  //RandomColorWalk = 1, //x
+  TraditionalColors = 1,
+  //ColorExplosion = 3,//x
+  Gradient = 2,
+  //BrightTwinkle = 5,//x
+  Collision = 3
 };
 unsigned char pattern = AllOff;
 unsigned int maxLoops;  // go to next state when loopCount >= maxLoops
@@ -46,9 +47,10 @@ unsigned int maxLoops;  // go to next state when loopCount >= maxLoops
 // initialization stuff
 void setup()
 {
+  pinMode(sw1Pin, OUTPUT);
   Serial.begin(9600);
-  Serial.setTimeout(10);
   HC12.begin(9600);
+  HC12.setTimeout(10);
   // initialize the random number generator with a seed obtained by
   // summing the voltages on the disconnected analog inputs
   for (int i = 0; i < 8; i++)
@@ -79,7 +81,7 @@ void loop()
     }
   }
 
-  if (pattern == WarmWhiteShimmer || pattern == RandomColorWalk)
+  /*if (pattern == WarmWhiteShimmer || pattern == RandomColorWalk)
   {
     // for these two patterns, we want to make sure we get the same
     // random sequence six times in a row (this provides smoother
@@ -89,25 +91,25 @@ void loop()
       seed = random(30000);
     }
     randomSeed(seed);
-  }
+  }*/
 
   // call the appropriate pattern routine based on state; these
   // routines just set the colors in the colors array
   switch (pattern)
   {
-    case WarmWhiteShimmer:
+    /*case WarmWhiteShimmer:
       // warm white shimmer for 300 loopCounts, fading over last 70
       maxLoops = 300;
       warmWhiteShimmer(loopCount > maxLoops - 70);
       break;
-
-    case RandomColorWalk:
+    */
+    /*case RandomColorWalk:
       // start with alternating red and green colors that randomly walk
       // to other colors for 400 loopCounts, fading over last 80
       maxLoops = 400;
       randomColorWalk(loopCount == 0 ? 1 : 0, loopCount > maxLoops - 80);
       break;
-
+    */
     case TraditionalColors:
       // repeating pattern of red, green, orange, blue, magenta that
       // slowly moves for 400 loopCounts
@@ -115,7 +117,7 @@ void loop()
       traditionalColors();
       break;
 
-    case ColorExplosion:
+    /*case ColorExplosion:
       // bursts of random color that radiate outwards from random points
       // for 630 loop counts; no burst generation for the last 70 counts
       // of every 200 count cycle or over the over final 100 counts
@@ -123,7 +125,7 @@ void loop()
       maxLoops = 630;
       colorExplosion((loopCount % 200 > 130) || (loopCount > maxLoops - 100));
       break;
-
+    */
     case Gradient:
       // red -> white -> green -> white -> red ... gradiant that scrolls
       // across the strips for 250 counts; this pattern is overlaid with
@@ -133,7 +135,7 @@ void loop()
       delay(6);  // add an extra 6ms delay to slow things down
       break;
 
-    case BrightTwinkle:
+    /*case BrightTwinkle:
       // random LEDs light up brightly and fade away; it is a very similar
       // algorithm to colorExplosion (just no radiating outward from the
       // LEDs that light up); as time goes on, allow progressively more
@@ -157,7 +159,7 @@ void loop()
         brightTwinkle(1, 6, loopCount > maxLoops - 100);
       }
       break;
-
+      */
     case Collision:
       // colors grow towards each other from the two ends of the strips,
       // accelerating until they collide and the whole strip flashes
@@ -189,25 +191,23 @@ void handleNextPatternButton()
 {
   if  (HC12.available() > 0) {
 
-    Serial.println("NEW DATA");
-    indata = int(HC12.read());
-    Serial.print(indata);
-    
+    indata = HC12.readStringUntil('\n');
+    Serial.println(indata);
     //loopCount = 0;  // reset timer
-    switch (indata) {
-      case 35:
+    if (indata == "sw1On") digitalWrite(sw1Pin, HIGH);
+    if (indata == "sw1Off") digitalWrite(sw1Pin, LOW);
+    switch (int(indata[0])) {
+      case '#':
         if (globalBrightness + brightnessStep <= 31) globalBrightness += brightnessStep;
         break;
-      case 42:
+      case '*':
         if (globalBrightness - brightnessStep >= 1) globalBrightness -= brightnessStep;
         break;
-      case 49: pattern = 1; break;
-      case 50: pattern = 2; break;
-      case 51: pattern = 3; break;
-      case 52: pattern = 4; break;
-      case 53: pattern = 5; break;
-      case 54: pattern = 6; break;
-      default: pattern = 7; loopCount = 0; break;
+      case '1': pattern = 1; break;
+      case '2': pattern = 2; break;
+      case '3': pattern = 3; break;
+      case '0': pattern = 0; loopCount = 0; 
+      default: break;
     }
   }
 }
@@ -281,7 +281,7 @@ void fade(unsigned char *val, unsigned char fadeTime)
 // disables the random increase option when it is true, causing
 // all the LEDs to get dimmer by changeAmount; this can be used for a
 // fade-out effect.
-void warmWhiteShimmer(unsigned char dimOnly)
+/*void warmWhiteShimmer(unsigned char dimOnly)
 {
   const unsigned char maxBrightness = 120;  // cap on LED brighness
   const unsigned char changeAmount = 2;   // size of random walk step
@@ -301,7 +301,7 @@ void warmWhiteShimmer(unsigned char dimOnly)
       colors[i + 1] = rgb_color(colors[i].red >> 2, colors[i].green >> 2, colors[i].blue >> 2);
     }
   }
-}
+}*/
 
 
 // ***** PATTERN RandomColorWalk *****
@@ -317,7 +317,7 @@ void warmWhiteShimmer(unsigned char dimOnly)
 // When true, the dimOnly argument changes the random walk into a 100%
 // chance of LEDs getting dimmer by changeAmount; this can be used for
 // a fade-out effect.
-void randomColorWalk(unsigned char initializeColors, unsigned char dimOnly)
+/*void randomColorWalk(unsigned char initializeColors, unsigned char dimOnly)
 {
   const unsigned char maxBrightness = 180;  // cap on LED brightness
   const unsigned char changeAmount = 3;  // size of random walk step
@@ -386,7 +386,7 @@ void randomColorWalk(unsigned char initializeColors, unsigned char dimOnly)
       colors[i + 2] = colors[i - 2];
     }
   }
-}
+}*/
 
 
 // ***** PATTERN TraditionalColors *****
@@ -472,7 +472,7 @@ void traditionalColors()
 // Helper function for adjusting the colors for the BrightTwinkle
 // and ColorExplosion patterns.  Odd colors get brighter and even
 // colors get dimmer.
-void brightTwinkleColorAdjust(unsigned char *color)
+/*void brightTwinkleColorAdjust(unsigned char *color)
 {
   if (*color == 255)
   {
@@ -495,7 +495,7 @@ void brightTwinkleColorAdjust(unsigned char *color)
       (*color)--;  // if faded color is odd, subtract one to keep it even
     }
   }
-}
+}*/
 
 
 // Helper function for adjusting the colors for the ColorExplosion
@@ -505,7 +505,7 @@ void brightTwinkleColorAdjust(unsigned char *color)
 // is 31 (chance is: 1 - 1/(propChance+1)).  The neighboring LED colors
 // are pointed to by leftColor and rightColor (it is not important that
 // the leftColor LED actually be on the "left" in your setup).
-void colorExplosionColorAdjust(unsigned char *color, unsigned char propChance,
+/*void colorExplosionColorAdjust(unsigned char *color, unsigned char propChance,
                                unsigned char *leftColor, unsigned char *rightColor)
 {
   if (*color == 31 && random(propChance + 1) != 0)
@@ -520,7 +520,7 @@ void colorExplosionColorAdjust(unsigned char *color, unsigned char propChance,
     }
   }
   brightTwinkleColorAdjust(color);
-}
+}*/
 
 
 // ***** PATTERN ColorExplosion *****
@@ -536,7 +536,7 @@ void colorExplosionColorAdjust(unsigned char *color, unsigned char propChance,
 // This function uses a very similar algorithm to the BrightTwinkle
 // pattern.  The main difference is that the random twinkling LEDs of
 // the BrightTwinkle pattern do not propagate to neighboring LEDs.
-void colorExplosion(unsigned char noNewBursts)
+/*void colorExplosion(unsigned char noNewBursts)
 {
   // adjust the colors of the first LED
   colorExplosionColorAdjust(&colors[0].red, 9, (unsigned char*)0, &colors[1].red);
@@ -606,7 +606,7 @@ void colorExplosion(unsigned char noNewBursts)
       }
     }
   }
-}
+}*/
 
 
 // ***** PATTERN Gradient *****
@@ -729,7 +729,7 @@ void gradient()
 // This function uses a very similar algorithm to the ColorExplosion
 // pattern.  The main difference is that the random twinkling LEDs of
 // this BrightTwinkle pattern do not propagate to neighboring LEDs.
-void brightTwinkle(unsigned char minColor, unsigned char numColors, unsigned char noNewBursts)
+/*void brightTwinkle(unsigned char minColor, unsigned char numColors, unsigned char noNewBursts)
 {
   // Note: the colors themselves are used to encode additional state
   // information.  If the color is one less than a power of two
@@ -788,7 +788,7 @@ void brightTwinkle(unsigned char minColor, unsigned char numColors, unsigned cha
       }
     }
   }
-}
+}*/
 
 
 // ***** PATTERN Collision *****

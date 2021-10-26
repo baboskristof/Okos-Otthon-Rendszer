@@ -1,19 +1,3 @@
-/*$(function(){
-	window.setInterval(function(){
-		loadnewdata()
-	}, 1000)
-
-	function loadnewdata(){
-		$.ajax({
-			url: "/up_data",
-			type: "POST",
-			dataType: "json",
-			success: function(data){
-				$(data_p).replaceWith(data)
-			}
-		});
-	}
-});*/
 $(function() {
 	$('a#anim1').on('click', function(e) {
 	  e.preventDefault()
@@ -42,29 +26,42 @@ $(function() {
 	});
 });
 $(function() {
-	$('a#brdn').on('click', function(e) {
-	  e.preventDefault()
-	  $.getJSON('/brightness_down',
-		  function(data) {
-	  });
-	  return false;
+	$('a#brdn').on('click', function (e) {
+		e.preventDefault()
+		$.getJSON('/brightness_down',
+			function (data) {
+			});
+		return false;
 	});
 });
 $(function() {
-	$('a#brup').on('click', function(e) {
-	  e.preventDefault()
-	  $.getJSON('/brightness_up',
-		  function(data) {
-	  });
-	  return false;
+	$('a#brup').on('click', function (e) {
+		e.preventDefault()
+		$.getJSON('/brightness_up',
+			function (data) {
+			});
+		return false;
 	});
 });
 $(function() {
-	$('a#led_off').on('click', function(e) {
-	  e.preventDefault()
-	  $.getJSON('/led_off',
-		  function(data) {
-	  });
-	  return false;
+	$('a#led_off').on('click', function (e) {
+		e.preventDefault()
+		$.getJSON('/led_off',
+			function (data) {
+			});
+		return false;
 	});
+});
+$(function() {
+$('#cardSw1').click(function () {
+	if ($(this).is(':checked')) {
+		$.getJSON('/sw1_on',
+			function (data) {
+			});
+	} else {
+		$.getJSON('/sw1_off',
+			function (data) {
+			});
+	}
+});
 });
