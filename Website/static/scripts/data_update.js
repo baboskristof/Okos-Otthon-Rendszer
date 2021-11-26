@@ -53,15 +53,28 @@ $(function() {
 	});
 });
 $(function() {
-$('#cardSw1').click(function () {
-	if ($(this).is(':checked')) {
-		$.getJSON('/sw1_on',
-			function (data) {
-			});
-	} else {
-		$.getJSON('/sw1_off',
-			function (data) {
-			});
-	}
+	$('#cardSw1').click(function () {
+		if ($(this).is(':checked')) {
+			$.getJSON('/sw1_on',
+				function () {
+				});
+		} else {
+			$.getJSON('/sw1_off',
+				function () {
+				});
+		}
+	});
 });
+$(function() {
+	$('#cardSw2').click(function () {
+		if ($(this).is(':checked')) {
+			$.getJSON('/sw2_on',
+				function (data) {
+				});
+		} else {
+			$.getJSON('/sw2_off',
+				function (data) {
+				});
+		}
+	});
 });

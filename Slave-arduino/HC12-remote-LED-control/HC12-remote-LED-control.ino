@@ -11,6 +11,8 @@ SoftwareSerial HC12(10, 11); // HC-12 TX Pin, HC-12 RX Pin
 const uint8_t dataPin = 2;
 const uint8_t clockPin = 3;
 const uint8_t sw1Pin = 4;
+const uint8_t sw2Pin = 5;
+
 APA102<dataPin, clockPin> ledStrip;
 
 #define LED_COUNT 24
@@ -48,6 +50,7 @@ unsigned int maxLoops;  // go to next state when loopCount >= maxLoops
 void setup()
 {
   pinMode(sw1Pin, OUTPUT);
+  pinMode(sw2Pin, OUTPUT);
   Serial.begin(9600);
   HC12.begin(9600);
   HC12.setTimeout(10);
@@ -195,7 +198,9 @@ void handleNextPatternButton()
     Serial.println(indata);
     //loopCount = 0;  // reset timer
     if (indata == "sw1On") digitalWrite(sw1Pin, HIGH);
-    if (indata == "sw1Off") digitalWrite(sw1Pin, LOW);
+    else if (indata == "sw1Off") digitalWrite(sw1Pin, LOW);
+    else if (indata == "sw2On") digitalWrite(sw2Pin, HIGH);
+    else if (indata == "sw2Off") digitalWrite(sw2Pin, LOW);
     switch (int(indata[0])) {
       case '#':
         if (globalBrightness + brightnessStep <= 31) globalBrightness += brightnessStep;
