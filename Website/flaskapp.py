@@ -2,6 +2,10 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import serial
 from flask import Flask, render_template
+import smtplib, ssl
+import time
+import atexit
+from apscheduler.schedulers.background import BackgroundScheduler
 
 arduino = serial.Serial(port='/dev/ttyACM0', baudrate=9600, timeout=.1)
 app = Flask(__name__)
@@ -19,9 +23,6 @@ class Actions(db.Model):
 	def __repr__(self):
 		return f'{self.time}|{self.action}'
 
-# data = [50, 10, 15, 7, 14]
-# labels = ['nappali 1', 'nappali 2', 'konyha', 'étkező', 'fürdőszoba']
-
 def timepairs(on_query, off_query):
 	'''returns a list of tuples, each tuple is (on_time, off_time)'''
 	pairs = []
@@ -36,13 +37,42 @@ def timepairs(on_query, off_query):
 def sumtime(pairs):
 	return sum([off-on for on, off in pairs], timedelta())
 
+mail_sent = True
+def send_email():
+	last_on_anim=Actions.query.filter_by(action='animation').order_by(Actions.time.desc()).first().time
+	last_off_anim=Actions.query.filter_by(action='anim_off').order_by(Actions.time.desc()).first().time
+	global mail_sent
+	timeD=timedelta(seconds=15)
+	if last_off_anim > last_on_anim: 
+		mail_sent = False
+	else:
+		if (last_on_anim + timeD < datetime.now()) and mail_sent == False:
+			print('mail sent!')
+			mail_sent = True
+			port = 465  # For SSL
+			smtp_server = "smtp.gmail.com"
+			sender_email = "bkraspi3@gmail.com"  # Enter your address
+			receiver_email = "babos.kristof@gmail.com"  # Enter receiver address
+			password = "vTBk8HkoWbuzgX"
+			message = f"""\
+			Subject: Riasztas
+
+
+			A LED mar tobb, mint 3 oraja be van kapcsolva."""
+
+			context = ssl.create_default_context()
+			with smtplib.SMTP_SSL(smtp_server, port, context=context) as server:
+				server.login(sender_email, password)
+				server.sendmail(sender_email, receiver_email, message)
+	
+
 @app.route('/')
 def index():
 	sw1pairs = timepairs(Actions.query.filter_by(action='sw1On').all(),Actions.query.filter_by(action='sw1Off').all())
-	sw2pairs = timepairs(Actions.query.filter_by(action='sw1On').all(),Actions.query.filter_by(action='sw1Off').all())
+	sw2pairs = timepairs(Actions.query.filter_by(action='sw2On').all(),Actions.query.filter_by(action='sw2Off').all())
 	animpairs = timepairs(Actions.query.filter_by(action='animation').all(),Actions.query.filter_by(action='anim_off').all())
-	data = [sumtime(sw1pairs).total_seconds(),sumtime(sw2pairs).total_seconds(),sumtime(animpairs).total_seconds()]
-	labels = ['kapcsoló 1', 'kapcsoló 2', 'LED szalag']
+	data = [sumtime(animpairs).total_seconds(),sumtime(sw1pairs).total_seconds(),sumtime(sw2pairs).total_seconds()]
+	labels = ['LED szalag', 'Switch 1', 'Switch 2']
 	print(data)
 	return render_template('index.html', values=data, labels=labels,
 						   last_action_anim=Actions.query.filter_by(action='animation').order_by(
@@ -51,6 +81,12 @@ def index():
 							   Actions.time.desc()).first().time.strftime('%Y. %b. %d. %H:%M:%S'),
 						   last_action_sw2=Actions.query.filter(Actions.action.like('sw2%')).order_by(Actions.time.desc()).first().time.strftime('%Y. %b. %d. %H:%M:%S'))
 
+scheduler = BackgroundScheduler()
+scheduler.add_job(func = send_email, trigger = "interval", seconds = 5)
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
 
 @app.route('/animation_1')
 def anim1():
