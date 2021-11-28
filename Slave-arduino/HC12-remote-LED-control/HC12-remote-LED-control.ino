@@ -8,6 +8,14 @@
 #include <SoftwareSerial.h>
 SoftwareSerial HC12(10, 11); // HC-12 TX Pin, HC-12 RX Pin
 
+#include "DHT.h"
+#define DHTPIN 8
+#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+DHT dht(DHTPIN, DHTTYPE);
+
+#include <arduino-timer.h>
+auto timer = timer_create_default(); // create a timer with default settings
+
 const uint8_t dataPin = 2;
 const uint8_t clockPin = 3;
 const uint8_t sw1Pin = 4;
@@ -45,6 +53,11 @@ enum Pattern {
 unsigned char pattern = AllOff;
 unsigned int maxLoops;  // go to next state when loopCount >= maxLoops
 
+bool send_temp(void *) {
+  float t = dht.readTemperature();
+  HC12.println(String(t, 2));
+  return true; // repeat? true
+}
 
 // initialization stuff
 void setup()
@@ -65,14 +78,18 @@ void setup()
   // save a random number in EEPROM to be used for random seed
   // generation the next time the program runs
   EEPROM.write(0, random(256));
+  dht.begin();
+  timer.every(1000, send_temp);
 }
 
 /********************************************************************/
 // main loop
 void loop()
 {
+  timer.tick();
+  
   uint8_t startTime = millis();
-
+  
   handleNextPatternButton();
 
   if (loopCount == 0)
@@ -84,35 +101,11 @@ void loop()
     }
   }
 
-  /*if (pattern == WarmWhiteShimmer || pattern == RandomColorWalk)
-  {
-    // for these two patterns, we want to make sure we get the same
-    // random sequence six times in a row (this provides smoother
-    // random fluctuations in brightness/color)
-    if (loopCount % 6 == 0)
-    {
-      seed = random(30000);
-    }
-    randomSeed(seed);
-  }*/
-
   // call the appropriate pattern routine based on state; these
   // routines just set the colors in the colors array
   switch (pattern)
   {
-    /*case WarmWhiteShimmer:
-      // warm white shimmer for 300 loopCounts, fading over last 70
-      maxLoops = 300;
-      warmWhiteShimmer(loopCount > maxLoops - 70);
-      break;
-    */
-    /*case RandomColorWalk:
-      // start with alternating red and green colors that randomly walk
-      // to other colors for 400 loopCounts, fading over last 80
-      maxLoops = 400;
-      randomColorWalk(loopCount == 0 ? 1 : 0, loopCount > maxLoops - 80);
-      break;
-    */
+
     case TraditionalColors:
       // repeating pattern of red, green, orange, blue, magenta that
       // slowly moves for 400 loopCounts
@@ -120,15 +113,6 @@ void loop()
       traditionalColors();
       break;
 
-    /*case ColorExplosion:
-      // bursts of random color that radiate outwards from random points
-      // for 630 loop counts; no burst generation for the last 70 counts
-      // of every 200 count cycle or over the over final 100 counts
-      // (this creates a repeating bloom/decay effect)
-      maxLoops = 630;
-      colorExplosion((loopCount % 200 > 130) || (loopCount > maxLoops - 100));
-      break;
-    */
     case Gradient:
       // red -> white -> green -> white -> red ... gradiant that scrolls
       // across the strips for 250 counts; this pattern is overlaid with
@@ -138,31 +122,6 @@ void loop()
       delay(6);  // add an extra 6ms delay to slow things down
       break;
 
-    /*case BrightTwinkle:
-      // random LEDs light up brightly and fade away; it is a very similar
-      // algorithm to colorExplosion (just no radiating outward from the
-      // LEDs that light up); as time goes on, allow progressively more
-      // colors, halting generation of new twinkles for last 100 counts.
-      maxLoops = 1200;
-      if (loopCount < 400)
-      {
-        brightTwinkle(0, 1, 0);  // only white for first 400 loopCounts
-      }
-      else if (loopCount < 650)
-      {
-        brightTwinkle(0, 2, 0);  // white and red for next 250 counts
-      }
-      else if (loopCount < 900)
-      {
-        brightTwinkle(1, 2, 0);  // red, and green for next 250 counts
-      }
-      else
-      {
-        // red, green, blue, cyan, magenta, yellow for the rest of the time
-        brightTwinkle(1, 6, loopCount > maxLoops - 100);
-      }
-      break;
-      */
     case Collision:
       // colors grow towards each other from the two ends of the strips,
       // accelerating until they collide and the whole strip flashes
@@ -276,124 +235,6 @@ void fade(unsigned char *val, unsigned char fadeTime)
   }
 }
 
-
-// ***** PATTERN WarmWhiteShimmer *****
-// This function randomly increases or decreases the brightness of the
-// even red LEDs by changeAmount, capped at maxBrightness.  The green
-// and blue LED values are set proportional to the red value so that
-// the LED color is warm white.  Each odd LED is set to a quarter the
-// brightness of the preceding even LEDs.  The dimOnly argument
-// disables the random increase option when it is true, causing
-// all the LEDs to get dimmer by changeAmount; this can be used for a
-// fade-out effect.
-/*void warmWhiteShimmer(unsigned char dimOnly)
-{
-  const unsigned char maxBrightness = 120;  // cap on LED brighness
-  const unsigned char changeAmount = 2;   // size of random walk step
-
-  for (int i = 0; i < LED_COUNT; i += 2)
-  {
-    // randomly walk the brightness of every even LED
-    randomWalk(&colors[i].red, maxBrightness, changeAmount, dimOnly ? 1 : 2);
-
-    // warm white: red = x, green = 0.8x, blue = 0.125x
-    colors[i].green = colors[i].red * 4 / 5; // green = 80% of red
-    colors[i].blue = colors[i].red >> 3;  // blue = red/8
-
-    // every odd LED gets set to a quarter the brighness of the preceding even LED
-    if (i + 1 < LED_COUNT)
-    {
-      colors[i + 1] = rgb_color(colors[i].red >> 2, colors[i].green >> 2, colors[i].blue >> 2);
-    }
-  }
-}*/
-
-
-// ***** PATTERN RandomColorWalk *****
-// This function randomly changes the color of every seventh LED by
-// randomly increasing or decreasing the red, green, and blue components
-// by changeAmount (capped at maxBrightness) or leaving them unchanged.
-// The two preceding and following LEDs are set to progressively dimmer
-// versions of the central color.  The initializeColors argument
-// determines how the colors are initialized:
-//   0: randomly walk the existing colors
-//   1: set the LEDs to alternating red and green segments
-//   2: set the LEDs to random colors
-// When true, the dimOnly argument changes the random walk into a 100%
-// chance of LEDs getting dimmer by changeAmount; this can be used for
-// a fade-out effect.
-/*void randomColorWalk(unsigned char initializeColors, unsigned char dimOnly)
-{
-  const unsigned char maxBrightness = 180;  // cap on LED brightness
-  const unsigned char changeAmount = 3;  // size of random walk step
-
-  // pick a good starting point for our pattern so the entire strip
-  // is lit well (if we pick wrong, the last four LEDs could be off)
-  unsigned char start;
-  switch (LED_COUNT % 7)
-  {
-    case 0:
-      start = 3;
-      break;
-    case 1:
-      start = 0;
-      break;
-    case 2:
-      start = 1;
-      break;
-    default:
-      start = 2;
-  }
-
-  for (int i = start; i < LED_COUNT; i += 7)
-  {
-    if (initializeColors == 0)
-    {
-      // randomly walk existing colors of every seventh LED
-      // (neighboring LEDs to these will be dimmer versions of the same color)
-      randomWalk(&colors[i].red, maxBrightness, changeAmount, dimOnly ? 1 : 3);
-      randomWalk(&colors[i].green, maxBrightness, changeAmount, dimOnly ? 1 : 3);
-      randomWalk(&colors[i].blue, maxBrightness, changeAmount, dimOnly ? 1 : 3);
-    }
-    else if (initializeColors == 1)
-    {
-      // initialize LEDs to alternating red and green
-      if (i % 2)
-      {
-        colors[i] = rgb_color(maxBrightness, 0, 0);
-      }
-      else
-      {
-        colors[i] = rgb_color(0, maxBrightness, 0);
-      }
-    }
-    else
-    {
-      // initialize LEDs to a string of random colors
-      colors[i] = rgb_color(random(maxBrightness), random(maxBrightness), random(maxBrightness));
-    }
-
-    // set neighboring LEDs to be progressively dimmer versions of the color we just set
-    if (i >= 1)
-    {
-      colors[i - 1] = rgb_color(colors[i].red >> 2, colors[i].green >> 2, colors[i].blue >> 2);
-    }
-    if (i >= 2)
-    {
-      colors[i - 2] = rgb_color(colors[i].red >> 3, colors[i].green >> 3, colors[i].blue >> 3);
-    }
-    if (i + 1 < LED_COUNT)
-    {
-      colors[i + 1] = colors[i - 1];
-    }
-    if (i + 2 < LED_COUNT)
-    {
-      colors[i + 2] = colors[i - 2];
-    }
-  }
-}*/
-
-
 // ***** PATTERN TraditionalColors *****
 // This function creates a repeating patern of traditional Christmas
 // light colors: red, green, orange, blue, magenta.
@@ -472,147 +313,6 @@ void traditionalColors()
     }
   }
 }
-
-
-// Helper function for adjusting the colors for the BrightTwinkle
-// and ColorExplosion patterns.  Odd colors get brighter and even
-// colors get dimmer.
-/*void brightTwinkleColorAdjust(unsigned char *color)
-{
-  if (*color == 255)
-  {
-    // if reached max brightness, set to an even value to start fade
-    *color = 254;
-  }
-  else if (*color % 2)
-  {
-    // if odd, approximately double the brightness
-    // you should only use odd values that are of the form 2^n-1,
-    // which then gets a new value of 2^(n+1)-1
-    // using other odd values will break things
-    *color = *color * 2 + 1;
-  }
-  else if (*color > 0)
-  {
-    fade(color, 4);
-    if (*color % 2)
-    {
-      (*color)--;  // if faded color is odd, subtract one to keep it even
-    }
-  }
-}*/
-
-
-// Helper function for adjusting the colors for the ColorExplosion
-// pattern.  Odd colors get brighter and even colors get dimmer.
-// The propChance argument determines the likelihood that neighboring
-// LEDs are put into the brightening stage when the central LED color
-// is 31 (chance is: 1 - 1/(propChance+1)).  The neighboring LED colors
-// are pointed to by leftColor and rightColor (it is not important that
-// the leftColor LED actually be on the "left" in your setup).
-/*void colorExplosionColorAdjust(unsigned char *color, unsigned char propChance,
-                               unsigned char *leftColor, unsigned char *rightColor)
-{
-  if (*color == 31 && random(propChance + 1) != 0)
-  {
-    if (leftColor != 0 && *leftColor == 0)
-    {
-      *leftColor = 1;  // if left LED exists and color is zero, propagate
-    }
-    if (rightColor != 0 && *rightColor == 0)
-    {
-      *rightColor = 1;  // if right LED exists and color is zero, propagate
-    }
-  }
-  brightTwinkleColorAdjust(color);
-}*/
-
-
-// ***** PATTERN ColorExplosion *****
-// This function creates bursts of expanding, overlapping colors by
-// randomly picking LEDs to brighten and then fade away.  As these LEDs
-// brighten, they have a chance to trigger the same process in
-// neighboring LEDs.  The color of the burst is randomly chosen from
-// among red, green, blue, and white.  If a red burst meets a green
-// burst, for example, the overlapping portion will be a shade of yellow
-// or orange.
-// When true, the noNewBursts argument changes prevents the generation
-// of new bursts; this can be used for a fade-out effect.
-// This function uses a very similar algorithm to the BrightTwinkle
-// pattern.  The main difference is that the random twinkling LEDs of
-// the BrightTwinkle pattern do not propagate to neighboring LEDs.
-/*void colorExplosion(unsigned char noNewBursts)
-{
-  // adjust the colors of the first LED
-  colorExplosionColorAdjust(&colors[0].red, 9, (unsigned char*)0, &colors[1].red);
-  colorExplosionColorAdjust(&colors[0].green, 9, (unsigned char*)0, &colors[1].green);
-  colorExplosionColorAdjust(&colors[0].blue, 9, (unsigned char*)0, &colors[1].blue);
-
-  for (int i = 1; i < LED_COUNT - 1; i++)
-  {
-    // adjust the colors of second through second-to-last LEDs
-    colorExplosionColorAdjust(&colors[i].red, 9, &colors[i - 1].red, &colors[i + 1].red);
-    colorExplosionColorAdjust(&colors[i].green, 9, &colors[i - 1].green, &colors[i + 1].green);
-    colorExplosionColorAdjust(&colors[i].blue, 9, &colors[i - 1].blue, &colors[i + 1].blue);
-  }
-
-  // adjust the colors of the last LED
-  colorExplosionColorAdjust(&colors[LED_COUNT - 1].red, 9, &colors[LED_COUNT - 2].red, (unsigned char*)0);
-  colorExplosionColorAdjust(&colors[LED_COUNT - 1].green, 9, &colors[LED_COUNT - 2].green, (unsigned char*)0);
-  colorExplosionColorAdjust(&colors[LED_COUNT - 1].blue, 9, &colors[LED_COUNT - 2].blue, (unsigned char*)0);
-
-  if (!noNewBursts)
-  {
-    // if we are generating new bursts, randomly pick one new LED
-    // to light up
-    for (int i = 0; i < 1; i++)
-    {
-      int j = random(LED_COUNT);  // randomly pick an LED
-
-      switch (random(7)) // randomly pick a color
-      {
-        // 2/7 chance we will spawn a red burst here (if LED has no red component)
-        case 0:
-        case 1:
-          if (colors[j].red == 0)
-          {
-            colors[j].red = 1;
-          }
-          break;
-
-        // 2/7 chance we will spawn a green burst here (if LED has no green component)
-        case 2:
-        case 3:
-          if (colors[j].green == 0)
-          {
-            colors[j].green = 1;
-          }
-          break;
-
-        // 2/7 chance we will spawn a white burst here (if LED is all off)
-        case 4:
-        case 5:
-          if ((colors[j].red == 0) && (colors[j].green == 0) && (colors[j].blue == 0))
-          {
-            colors[j] = rgb_color(1, 1, 1);
-          }
-          break;
-
-        // 1/7 chance we will spawn a blue burst here (if LED has no blue component)
-        case 6:
-          if (colors[j].blue == 0)
-          {
-            colors[j].blue = 1;
-          }
-          break;
-
-        default:
-          break;
-      }
-    }
-  }
-}*/
-
 
 // ***** PATTERN Gradient *****
 // This function creates a scrolling color gradient that smoothly
@@ -718,83 +418,6 @@ void gradient()
     j += fullBrightLEDs;
   }
 }
-
-
-// ***** PATTERN BrightTwinkle *****
-// This function creates a sparkling/twinkling effect by randomly
-// picking LEDs to brighten and then fade away.  Possible colors are:
-//   white, red, green, blue, yellow, cyan, and magenta
-// numColors is the number of colors to generate, and minColor
-// indicates the starting point (white is 0, red is 1, ..., and
-// magenta is 6), so colors generated are all of those from minColor
-// to minColor+numColors-1.  For example, calling brightTwinkle(2, 2, 0)
-// will produce green and blue twinkles only.
-// When true, the noNewBursts argument changes prevents the generation
-// of new twinkles; this can be used for a fade-out effect.
-// This function uses a very similar algorithm to the ColorExplosion
-// pattern.  The main difference is that the random twinkling LEDs of
-// this BrightTwinkle pattern do not propagate to neighboring LEDs.
-/*void brightTwinkle(unsigned char minColor, unsigned char numColors, unsigned char noNewBursts)
-{
-  // Note: the colors themselves are used to encode additional state
-  // information.  If the color is one less than a power of two
-  // (but not 255), the color will get approximately twice as bright.
-  // If the color is even, it will fade.  The sequence goes as follows:
-  // * Randomly pick an LED.
-  // * Set the color(s) you want to flash to 1.
-  // * It will automatically grow through 3, 7, 15, 31, 63, 127, 255.
-  // * When it reaches 255, it gets set to 254, which starts the fade
-  //   (the fade process always keeps the color even).
-  for (int i = 0; i < LED_COUNT; i++)
-  {
-    brightTwinkleColorAdjust(&colors[i].red);
-    brightTwinkleColorAdjust(&colors[i].green);
-    brightTwinkleColorAdjust(&colors[i].blue);
-  }
-
-  if (!noNewBursts)
-  {
-    // if we are generating new twinkles, randomly pick four new LEDs
-    // to light up
-    for (int i = 0; i < 4; i++)
-    {
-      int j = random(LED_COUNT);
-      if (colors[j].red == 0 && colors[j].green == 0 && colors[j].blue == 0)
-      {
-        // if the LED we picked is not already lit, pick a random
-        // color for it and seed it so that it will start getting
-        // brighter in that color
-        switch (random(numColors) + minColor)
-        {
-          case 0:
-            colors[j] = rgb_color(1, 1, 1);  // white
-            break;
-          case 1:
-            colors[j] = rgb_color(1, 0, 0);  // red
-            break;
-          case 2:
-            colors[j] = rgb_color(0, 1, 0);  // green
-            break;
-          case 3:
-            colors[j] = rgb_color(0, 0, 1);  // blue
-            break;
-          case 4:
-            colors[j] = rgb_color(1, 1, 0);  // yellow
-            break;
-          case 5:
-            colors[j] = rgb_color(0, 1, 1);  // cyan
-            break;
-          case 6:
-            colors[j] = rgb_color(1, 0, 1);  // magenta
-            break;
-          default:
-            colors[j] = rgb_color(1, 1, 1);  // white
-        }
-      }
-    }
-  }
-}*/
-
 
 // ***** PATTERN Collision *****
 // This function spawns streams of color from each end of the strip

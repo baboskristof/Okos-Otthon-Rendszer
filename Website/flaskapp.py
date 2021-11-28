@@ -1,11 +1,12 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import serial
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 import smtplib, ssl
 import time
 import atexit
 from apscheduler.schedulers.background import BackgroundScheduler
+
 
 arduino = serial.Serial(port='/dev/ttyACM0', baudrate=9600, timeout=.1)
 app = Flask(__name__)
@@ -14,6 +15,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///flaskdb.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+temperature = 0
 
 class Actions(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -74,7 +76,7 @@ def index():
 	data = [sumtime(animpairs).total_seconds(),sumtime(sw1pairs).total_seconds(),sumtime(sw2pairs).total_seconds()]
 	labels = ['LED szalag', 'Switch 1', 'Switch 2']
 	print(data)
-	return render_template('index.html', values=data, labels=labels,
+	return render_template('index.html', values=data, labels=labels, t = temperature,
 						   last_action_anim=Actions.query.filter_by(action='animation').order_by(
 							   Actions.time.desc()).first().time.strftime('%Y. %b. %d. %H:%M:%S'),
 						   last_action_sw1=Actions.query.filter(Actions.action.like('sw1%')).order_by(
@@ -166,6 +168,11 @@ def sw2off():
 	db.session.add(Actions(time=datetime.now(), action='sw2Off'))
 	db.session.commit()
 	return ('switch2 off')
+
+@app.route('/update_temp', methods=['POST'])
+def update_temp():
+	temperature = str(arduino.readline().decode('UTF-8').strip())
+	return jsonify('',render_template('temperature.html', t=temperature))
 
 
 if __name__ == '__main__':
